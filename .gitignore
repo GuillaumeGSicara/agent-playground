@@ -1,0 +1,14 @@
+**/__pycache__/
+.ipynb_checkpoints/
+*.pkl
+.github/
+
+.claude/
+
+data/
+!data/.gitkeep
+
+.cache/
+
+.env
+.venv/

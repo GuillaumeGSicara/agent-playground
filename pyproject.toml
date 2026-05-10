@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_playground"]
+
+[project]
+name = "agent-playground"
+version = "0.1.0"
+description = "A playground for experimenting with AI agents"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Guillaume Gonde" }]
+dependencies = [
+    "a2a-sdk>=1.0.2",
+    "ag-ui-protocol>=0.1.18",
+    "fastapi>=0.136.1",
+    "openai>=2.36.0",
+    "pydantic-settings>=2.14.1",
+    "sse-starlette>=3.4.2",
+    "uvicorn>=0.46.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.0.0",
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "radon[toml]>=6.0.1",
+    "ruff>=0.1.0",
+    "xenon>=0.9.3",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["a2a.*", "ag_ui.*", "uvicorn.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

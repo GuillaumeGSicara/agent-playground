@@ -1,0 +1,130 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  BASE_URL: "http://localhost:{{.AGENT_PORT}}"
+
+tasks:
+  run:
+    desc: Start the agent server
+    cmd: uv run python -m agent_playground
+
+  card:
+    desc: Fetch the A2A agent card
+    cmd: curl -s {{.BASE_URL}}/.well-known/agent-card.json | jq
+
+  ask:
+    desc: Send a question to the agent via AG-UI (POST /invocations)
+    vars:
+      QUESTION: '{{.QUESTION | default "What is the capital of France?"}}'
+    cmd: |
+      curl -s -N \
+        -H "Content-Type: application/json" \
+        -H "Accept: text/event-stream" \
+        -d '{
+          "thread_id": "debug-thread-1",
+          "run_id": "debug-run-1",
+          "state": null,
+          "messages": [
+            {"id": "msg-1", "role": "user", "content": "{{.QUESTION}}"}
+          ],
+          "tools": [],
+          "context": [],
+          "forwarded_props": {}
+        }' \
+        {{.BASE_URL}}/invocations
+
+  ask:pretty:
+    desc: Same as ask but pretty-prints each SSE event as formatted JSON
+    vars:
+      QUESTION: '{{.QUESTION | default "What is the capital of France?"}}'
+    cmd: |
+      curl -s -N \
+        -H "Content-Type: application/json" \
+        -H "Accept: text/event-stream" \
+        -d '{
+          "thread_id": "debug-thread-1",
+          "run_id": "debug-run-1",
+          "state": null,
+          "messages": [
+            {"id": "msg-1", "role": "user", "content": "{{.QUESTION}}"}
+          ],
+          "tools": [],
+          "context": [],
+          "forwarded_props": {}
+        }' \
+        {{.BASE_URL}}/invocations \
+        | grep "^data:" \
+        | sed 's/^data: //' \
+        | while IFS= read -r line; do echo "$line" | python3 -m json.tool; echo "---"; done
+
+  ask:search:
+    desc: Ask a question that forces a web-search tool call (validates full tool-call flow)
+    vars:
+      QUESTION: '{{.QUESTION | default "Search the web for the latest news about AI agents."}}'
+    cmd: |
+      curl -s -N \
+        -H "Content-Type: application/json" \
+        -H "Accept: text/event-stream" \
+        -d '{
+          "thread_id": "debug-thread-2",
+          "run_id": "debug-run-2",
+          "state": null,
+          "messages": [
+            {"id": "msg-1", "role": "user", "content": "{{.QUESTION}}"}
+          ],
+          "tools": [],
+          "context": [],
+          "forwarded_props": {}
+        }' \
+        {{.BASE_URL}}/invocations \
+        | grep "^data:" \
+        | sed 's/^data: //' \
+        | while IFS= read -r line; do echo "$line" | python3 -m json.tool; echo "---"; done
+
+  check:events:
+    desc: Show only the event-type sequence from an AG-UI run (no content noise)
+    vars:
+      QUESTION: '{{.QUESTION | default "Search the web for the latest news about AI agents."}}'
+    cmd: |
+      curl -s -N \
+        -H "Content-Type: application/json" \
+        -H "Accept: text/event-stream" \
+        -d '{
+          "thread_id": "debug-thread-3",
+          "run_id": "debug-run-3",
+          "state": null,
+          "messages": [
+            {"id": "msg-1", "role": "user", "content": "{{.QUESTION}}"}
+          ],
+          "tools": [],
+          "context": [],
+          "forwarded_props": {}
+        }' \
+        {{.BASE_URL}}/invocations \
+        | grep "^data:" \
+        | sed 's/^data: //' \
+        | python3 -c "
+      import sys, json
+      for line in sys.stdin:
+          line = line.strip()
+          if not line:
+              continue
+          try:
+              obj = json.loads(line)
+              t = obj.get('type', '?')
+              extra = ''
+              if 'toolCallName' in obj:
+                  extra = f\" ({obj['toolCallName']})\"
+              elif 'delta' in obj:
+                  preview = obj['delta'][:40].replace('\n', ' ')
+                  extra = f\" → {preview!r}\"
+              print(f'  {t}{extra}')
+          except Exception:
+              print(f'  RAW: {line[:80]}')
+      "
+
+  ping:
+    desc: Health check
+    cmd: curl -s {{.BASE_URL}}/ping | python3 -m json.tool

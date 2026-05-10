@@ -1,0 +1,57 @@
+default_install_hook_types:
+  # Mandatory to install both pre-commit and pre-push hooks (see https://pre-commit.com/#top_level-default_install_hook_types)
+  # Add new hook types here to ensure automatic installation when running `pre-commit install`
+  - pre-commit
+  - pre-push
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: format-fix
+        name: Formatting (ruff)
+        entry: uv run ruff format src/ tests/
+        pass_filenames: false
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: lint-fix
+        name: Linting fix (ruff)
+        entry: uv run ruff check --fix src/ tests/
+        pass_filenames: false
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: type-check
+        name: Type checking (mypy)
+        entry: >
+           uv run mypy
+            --explicit-package-bases
+            src/ tests/
+        pass_filenames: false
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+      - id: cyclomatic-complexity
+        name: Cyclomatic Complexity check (radon/xenon)
+        entry: >
+          uv run xenon src/ tests/
+            --max-average B
+            --max-module B
+            --max-absolute C
+        pass_filenames: false
+        language: system
+        types: [python]
+        stages: [pre-commit]
