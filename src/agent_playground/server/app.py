@@ -10,12 +10,14 @@ from a2a.types import AgentCard
 
 from agent_playground.execution.agui import AguiHandler
 from agent_playground.execution.executor import WebSearchAgentExecutor
+from agent_playground.infrastructure.conversation_store import ConversationStore, ConversationSummary
 
 
 def build_app(
     agent_card: AgentCard,
     executor: WebSearchAgentExecutor,
     agui_handler: AguiHandler,
+    conversation_store: ConversationStore,
 ) -> Starlette:
     request_handler: DefaultRequestHandler = DefaultRequestHandler(
         agent_executor=executor,
@@ -23,13 +25,31 @@ def build_app(
         agent_card=agent_card,
     )
 
-    async def ping(request: Request) -> JSONResponse:
+    async def ping(_request: Request) -> JSONResponse:
         return JSONResponse({"status": "Healthy"})
+
+    async def list_tasks(_request: Request) -> JSONResponse:
+        conversations: list[ConversationSummary] = conversation_store.all()
+        return JSONResponse(
+            {
+                "conversations": [
+                    {
+                        "thread_id": c.thread_id,
+                        "last_message": c.last_user_message,
+                        "last_activity": c.last_activity,
+                        "run_count": c.run_count,
+                    }
+                    for c in conversations
+                ],
+                "total": len(conversations),
+            }
+        )
 
     all_routes: list[Route] = [
         *create_agent_card_routes(agent_card),
         *create_jsonrpc_routes(request_handler, rpc_url="/"),
         Route("/invocations", agui_handler.handle, methods=["POST"]),
+        Route("/tasks", list_tasks, methods=["GET"]),
         Route("/ping", ping, methods=["GET"]),
     ]
 

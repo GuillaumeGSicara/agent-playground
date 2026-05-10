@@ -19,6 +19,7 @@ dependencies = [
     "openai>=2.36.0",
     "pydantic-settings>=2.14.1",
     "sse-starlette>=3.4.2",
+    "tavily-python>=0.7.24",
     "uvicorn>=0.46.0",
 ]
 
@@ -44,7 +45,7 @@ disallow_untyped_defs = true
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["a2a.*", "ag_ui.*", "uvicorn.*"]
+module = ["a2a.*", "ag_ui.*", "uvicorn.*", "tavily.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

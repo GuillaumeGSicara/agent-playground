@@ -19,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from agent_playground.execution.agent import Agent
+from agent_playground.infrastructure.conversation_store import ConversationStore
 from agent_playground.models.events import (
     AgentEvent,
     TextChunkEvent,
@@ -30,8 +31,9 @@ from agent_playground.models.events import (
 
 
 class AguiHandler:
-    def __init__(self, agent: Agent) -> None:
+    def __init__(self, agent: Agent, conversation_store: ConversationStore) -> None:
         self._agent: Agent = agent
+        self._conversation_store: ConversationStore = conversation_store
 
     async def handle(self, request: Request) -> StreamingResponse:
         body: dict[str, object] = await request.json()
@@ -57,6 +59,7 @@ class AguiHandler:
 
         user_messages = [m for m in input_data.messages if m.role == "user"]
         user_text: str = str(user_messages[-1].content) if user_messages else ""
+        self._conversation_store.record(input_data.thread_id, user_text)
         message_id: str = str(uuid.uuid4())
         message_started: bool = False
 

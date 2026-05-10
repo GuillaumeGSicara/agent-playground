@@ -1,9 +1,13 @@
+from pydantic import SecretStr
+from tavily import AsyncTavilyClient
+
 from agent_playground.constants import ToolName
 from agent_playground.models.tools import ToolDefinition, ToolFunction, ToolParameter, ToolParameters
 
 
 class WebSearchTool:
-    """Mock web search tool — real Tavily integration deferred."""
+    def __init__(self, api_key: SecretStr) -> None:
+        self._client: AsyncTavilyClient = AsyncTavilyClient(api_key=api_key.get_secret_value())
 
     @property
     def name(self) -> str:
@@ -23,4 +27,11 @@ class WebSearchTool:
         )
 
     async def run(self, query: str) -> str:
-        return f"[MOCK] Web search for '{query}': No real results — Tavily integration pending."
+        response: dict = await self._client.search(query, max_results=5)
+        results: list[dict] = response.get("results", [])
+        if not results:
+            return f"No results found for '{query}'."
+        lines: list[str] = []
+        for r in results:
+            lines.append(f"- {r['title']}\n  {r['url']}\n  {r['content']}")
+        return "\n\n".join(lines)

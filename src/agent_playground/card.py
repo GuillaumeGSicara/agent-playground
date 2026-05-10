@@ -19,11 +19,13 @@ def build_agent_card(url: str) -> AgentCard:
     iface.protocol_version = PROTOCOL_VERSION_CURRENT
     card.supported_interfaces.append(iface)
 
-    skill: AgentSkill = AgentSkill()
-    skill.id = SkillId.WEB_SEARCH
-    skill.name = "Web Search"
-    skill.description = "Search the web for current information"
-    skill.tags.extend(["search", "web"])
-    card.skills.append(skill)
+    card.skills.append(
+        AgentSkill(
+            id=SkillId.WEB_SEARCH,
+            name="Web Search",
+            description="Search the web for current information",
+            tags=["search", "web"],
+        )
+    )
 
     return card

@@ -57,7 +57,7 @@ tasks:
         {{.BASE_URL}}/invocations \
         | grep "^data:" \
         | sed 's/^data: //' \
-        | while IFS= read -r line; do echo "$line" | python3 -m json.tool; echo "---"; done
+        | while IFS= read -r line; do echo "$line" | jq; echo "---"; done
 
   ask:search:
     desc: Ask a question that forces a web-search tool call (validates full tool-call flow)
@@ -81,7 +81,7 @@ tasks:
         {{.BASE_URL}}/invocations \
         | grep "^data:" \
         | sed 's/^data: //' \
-        | while IFS= read -r line; do echo "$line" | python3 -m json.tool; echo "---"; done
+        | while IFS= read -r line; do echo "$line" | jq; echo "---"; done
 
   check:events:
     desc: Show only the event-type sequence from an AG-UI run (no content noise)
@@ -125,6 +125,20 @@ tasks:
               print(f'  RAW: {line[:80]}')
       "
 
+  tasks:
+    desc: List all ongoing conversations (A2A tasks) on the running agent
+    cmd: curl -s {{.BASE_URL}}/tasks | jq
+
   ping:
     desc: Health check
-    cmd: curl -s {{.BASE_URL}}/ping | python3 -m json.tool
+    cmd: curl -s {{.BASE_URL}}/ping | jq
+
+  ui:install:
+    desc: Install UI dependencies
+    dir: ui
+    cmd: npm install
+
+  ui:
+    desc: Start the chat UI dev server (http://localhost:3000)
+    dir: ui
+    cmd: npm run dev
