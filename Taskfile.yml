@@ -142,3 +142,8 @@ tasks:
     desc: Start the chat UI dev server (http://localhost:3000)
     dir: ui
     cmd: npm run dev
+
+  archi:likec4:
+    desc: Show a high-level architecture diagram of the agent system
+    dir: docs/architecture
+    cmd: likec4 start

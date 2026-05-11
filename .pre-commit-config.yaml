@@ -50,7 +50,7 @@ repos:
           uv run xenon src/ tests/
             --max-average B
             --max-module B
-            --max-absolute C
+            --max-absolute B
         pass_filenames: false
         language: system
         types: [python]
