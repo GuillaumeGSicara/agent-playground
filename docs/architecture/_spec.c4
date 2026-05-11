@@ -1,0 +1,25 @@
+specification {
+  element actor {
+    style {
+      shape person
+    }
+  }
+  element system
+  element webapp {
+    style {
+      shape browser
+    }
+  }
+  element service {
+    style {
+      shape component
+    }
+  }
+
+  tag external
+
+  relationship sse {
+    color amber
+    line dashed
+  }
+}

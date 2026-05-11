@@ -79,6 +79,7 @@ class Agent:
         state: _StepState,
     ) -> AsyncGenerator[AgentEvent, None]:
         message_id: str = str(uuid.uuid4())
+
         async for chunk in self._llm.stream_chat(messages, [self._search_tool.definition]):
             if not chunk.choices:
                 continue
