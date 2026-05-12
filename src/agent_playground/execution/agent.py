@@ -1,9 +1,9 @@
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass, field
 
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
+from pydantic import BaseModel, Field
 
 from agent_playground.constants import MAX_REACT_ITERATIONS, SYSTEM_PROMPT, ToolName
 from agent_playground.infrastructure.llm import LLMClient
@@ -27,11 +27,18 @@ from agent_playground.models.messages import (
 )
 
 
-@dataclass
-class _StepState:
-    finish_reason: str | None = None
-    pending_tool_calls: dict[int, dict[str, str]] = field(default_factory=dict)
-    response_text: str = ""
+class PendingToolCall(BaseModel):
+    id: str = Field(default="", description="The unique identifier for the tool call")
+    name: str = Field(default="", description="The name of the tool to be called")
+    args: str = Field(default="", description="The accumulated JSON arguments string for the tool call")
+
+
+class _StepState(BaseModel):
+    finish_reason: str | None = Field(default=None, description="The reason the LLM finished the current turn")
+    pending_tool_calls: dict[int, PendingToolCall] = Field(
+        default_factory=dict, description="A mapping of tool call indices to their pending state"
+    )
+    response_text: str = Field(default="", description="The accumulated text response from the LLM")
 
 
 class Agent:
@@ -53,24 +60,38 @@ class Agent:
     def _process_tool_call_delta(
         self,
         tc: ChoiceDeltaToolCall,
-        pending: dict[int, dict[str, str]],
+        pending: dict[int, PendingToolCall],
         message_id: str,
     ) -> list[AgentEvent]:
-        events: list[AgentEvent] = []
         idx: int = tc.index
         if idx not in pending:
-            tc_id: str = tc.id or ""
-            tc_name: str = (tc.function.name or "") if tc.function else ""
-            pending[idx] = {"id": tc_id, "name": tc_name, "args": ""}
-            events.append(ToolCallStartEvent(tool_call_id=tc_id, tool_name=tc_name, parent_message_id=message_id))
-        else:
-            if tc.id and not pending[idx]["id"]:
-                pending[idx]["id"] = tc.id
-            if tc.function and tc.function.name and not pending[idx]["name"]:
-                pending[idx]["name"] = tc.function.name
+            return self._init_pending_tool_call(tc, pending, message_id)
+        return self._update_pending_tool_call(tc, pending[idx])
+
+    def _init_pending_tool_call(
+        self,
+        tc: ChoiceDeltaToolCall,
+        pending: dict[int, PendingToolCall],
+        message_id: str,
+    ) -> list[AgentEvent]:
+        tc_id: str = tc.id or ""
+        tc_name: str = (tc.function.name or "") if tc.function else ""
+        pending[tc.index] = PendingToolCall(id=tc_id, name=tc_name, args="")
+        return [ToolCallStartEvent(tool_call_id=tc_id, tool_name=tc_name, parent_message_id=message_id)]
+
+    def _update_pending_tool_call(
+        self,
+        tc: ChoiceDeltaToolCall,
+        pending: PendingToolCall,
+    ) -> list[AgentEvent]:
+        events: list[AgentEvent] = []
+        if tc.id and not pending.id:
+            pending.id = tc.id
+        if tc.function and tc.function.name and not pending.name:
+            pending.name = tc.function.name
         if tc.function and tc.function.arguments:
-            pending[idx]["args"] += tc.function.arguments
-            events.append(ToolCallArgsEvent(tool_call_id=pending[idx]["id"], delta=tc.function.arguments))
+            pending.args += tc.function.arguments
+            events.append(ToolCallArgsEvent(tool_call_id=pending.id, delta=tc.function.arguments))
         return events
 
     async def _stream_llm_response(
@@ -97,13 +118,13 @@ class Agent:
     async def _yield_tool_results(
         self,
         messages: list[LLMMessage],
-        pending: dict[int, dict[str, str]],
+        pending: dict[int, PendingToolCall],
     ) -> AsyncGenerator[AgentEvent, None]:
         for v in pending.values():
-            yield ToolCallEndEvent(tool_call_id=v["id"])
-            result: str = await self._execute_tool(v["name"], v["args"])
-            yield ToolResultEvent(tool_call_id=v["id"], result=result)
-            messages.append(ToolMessage(role="tool", tool_call_id=v["id"], content=result))
+            yield ToolCallEndEvent(tool_call_id=v.id)
+            result: str = await self._execute_tool(v.name, v.args)
+            yield ToolResultEvent(tool_call_id=v.id, result=result)
+            messages.append(ToolMessage(role="tool", tool_call_id=v.id, content=result))
 
     async def run(
         self,
@@ -123,7 +144,7 @@ class Agent:
                     role="assistant",
                     content=state.response_text or None,
                     tool_calls=[
-                        ToolCallParam(id=v["id"], function=ToolCallFunction(name=v["name"], arguments=v["args"]))
+                        ToolCallParam(id=v.id, function=ToolCallFunction(name=v.name, arguments=v.args))
                         for v in state.pending_tool_calls.values()
                     ],
                 )

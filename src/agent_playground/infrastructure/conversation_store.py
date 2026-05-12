@@ -1,13 +1,15 @@
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from pydantic import BaseModel, Field
 
-@dataclass
-class ConversationSummary:
-    thread_id: str
-    last_user_message: str
-    last_activity: str  # ISO 8601
-    run_count: int
+
+class ConversationSummary(BaseModel):
+    """A summary of an AG-UI conversation thread."""
+
+    thread_id: str = Field(..., description="The unique identifier for the conversation thread")
+    last_user_message: str = Field(..., description="The content of the last message sent by the user")
+    last_activity: datetime = Field(..., description="The timestamp of the last activity in this thread")
+    run_count: int = Field(..., description="The number of times the agent has been run in this thread")
 
 
 class ConversationStore:
@@ -22,7 +24,7 @@ class ConversationStore:
         self._threads[thread_id] = ConversationSummary(
             thread_id=thread_id,
             last_user_message=last_user_message[:200],
-            last_activity=datetime.now(timezone.utc).isoformat(),
+            last_activity=datetime.now(timezone.utc),
             run_count=run_count,
         )
 
