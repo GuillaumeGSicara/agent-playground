@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from ag_ui.core import (
     RunAgentInput,
@@ -60,47 +61,63 @@ class AguiHandler:
         user_messages = [m for m in input_data.messages if m.role == "user"]
         user_text: str = str(user_messages[-1].content) if user_messages else ""
         self._conversation_store.record(input_data.thread_id, user_text)
-        message_id: str = str(uuid.uuid4())
-        message_started: bool = False
+
+        state: dict[str, Any] = {
+            "message_id": str(uuid.uuid4()),
+            "message_started": False,
+        }
 
         try:
-            event: AgentEvent
             async for event in self._agent.run(user_text):
-                if isinstance(event, TextChunkEvent):
-                    if not message_started:
-                        yield encoder.encode(TextMessageStartEvent(message_id=message_id, role="assistant"))
-                        message_started = True
-                    yield encoder.encode(TextMessageContentEvent(message_id=message_id, delta=event.delta))
+                async for encoded_event in self._handle_agent_event(event, state, encoder):
+                    yield encoded_event
 
-                elif isinstance(event, ToolCallStartEvent):
-                    yield encoder.encode(
-                        AguiToolCallStartEvent(
-                            tool_call_id=event.tool_call_id,
-                            tool_call_name=event.tool_name,
-                            parent_message_id=event.parent_message_id,
-                        )
-                    )
-
-                elif isinstance(event, ToolCallArgsEvent):
-                    yield encoder.encode(AguiToolCallArgsEvent(tool_call_id=event.tool_call_id, delta=event.delta))
-
-                elif isinstance(event, ToolCallEndEvent):
-                    yield encoder.encode(AguiToolCallEndEvent(tool_call_id=event.tool_call_id))
-
-                elif isinstance(event, ToolResultEvent):
-                    yield encoder.encode(
-                        AguiToolCallResultEvent(
-                            message_id=str(uuid.uuid4()),
-                            tool_call_id=event.tool_call_id,
-                            content=event.result,
-                            role="tool",
-                        )
-                    )
-
-            if message_started:
-                yield encoder.encode(TextMessageEndEvent(message_id=message_id))
+            if state["message_started"]:
+                yield encoder.encode(TextMessageEndEvent(message_id=state["message_id"]))
 
             yield encoder.encode(RunFinishedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id))
 
         except Exception as exc:
             yield encoder.encode(RunErrorEvent(message=str(exc)))
+
+    async def _handle_agent_event(
+        self,
+        event: AgentEvent,
+        state: dict[str, Any],
+        encoder: EventEncoder,
+    ) -> AsyncGenerator[str, None]:
+        if isinstance(event, TextChunkEvent):
+            if not state["message_started"]:
+                yield encoder.encode(TextMessageStartEvent(message_id=state["message_id"], role="assistant"))
+                state["message_started"] = True
+            yield encoder.encode(TextMessageContentEvent(message_id=state["message_id"], delta=event.delta))
+        elif isinstance(event, ToolCallStartEvent | ToolCallArgsEvent | ToolCallEndEvent | ToolResultEvent):
+            async for encoded in self._handle_tool_event(event, encoder):
+                yield encoded
+
+    async def _handle_tool_event(
+        self,
+        event: AgentEvent,
+        encoder: EventEncoder,
+    ) -> AsyncGenerator[str, None]:
+        if isinstance(event, ToolCallStartEvent):
+            yield encoder.encode(
+                AguiToolCallStartEvent(
+                    tool_call_id=event.tool_call_id,
+                    tool_call_name=event.tool_name,
+                    parent_message_id=event.parent_message_id,
+                )
+            )
+        elif isinstance(event, ToolCallArgsEvent):
+            yield encoder.encode(AguiToolCallArgsEvent(tool_call_id=event.tool_call_id, delta=event.delta))
+        elif isinstance(event, ToolCallEndEvent):
+            yield encoder.encode(AguiToolCallEndEvent(tool_call_id=event.tool_call_id))
+        elif isinstance(event, ToolResultEvent):
+            yield encoder.encode(
+                AguiToolCallResultEvent(
+                    message_id=str(uuid.uuid4()),
+                    tool_call_id=event.tool_call_id,
+                    content=event.result,
+                    role="tool",
+                )
+            )

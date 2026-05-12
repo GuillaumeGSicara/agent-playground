@@ -9,6 +9,11 @@ from agent_playground.infrastructure.llm import LLMClient
 from agent_playground.infrastructure.search import WebSearchTool
 from agent_playground.server.app import build_app
 from agent_playground.settings import AgentSettings
+from starlette.applications import Starlette
+
+from a2a.types import AgentCard
+
+...
 
 
 def main() -> None:
@@ -25,8 +30,8 @@ def main() -> None:
     conversation_store: ConversationStore = ConversationStore()
     agui_handler: AguiHandler = AguiHandler(agent=agent, conversation_store=conversation_store)
 
-    agent_card = build_agent_card(url=f"http://{settings.agent_host}:{settings.agent_port}")
-    app = build_app(
+    agent_card: AgentCard = build_agent_card(url=f"http://{settings.agent_host}:{settings.agent_port}")
+    app: Starlette = build_app(
         agent_card=agent_card,
         executor=executor,
         agui_handler=agui_handler,
