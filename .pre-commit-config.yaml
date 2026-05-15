@@ -55,3 +55,11 @@ repos:
         language: system
         types: [python]
         stages: [pre-commit]
+
+      - id: import-linter-contracts
+        name: Import Linter (contracts)
+        entry: uv run lint-imports --config .importlinter --no-cache
+        pass_filenames: false
+        language: system
+        types: [python]
+        stages: [pre-commit]
