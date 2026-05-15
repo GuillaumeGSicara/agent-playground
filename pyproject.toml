@@ -20,11 +20,13 @@ dependencies = [
     "pydantic-settings>=2.14.1",
     "sse-starlette>=3.4.2",
     "tavily-python>=0.7.24",
+    "pypdf>=4.0,<5",
     "uvicorn>=0.46.0",
 ]
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.0",
     "mypy>=1.0.0",
     "pre-commit>=4.0.0",
     "pytest>=8.0.0",
