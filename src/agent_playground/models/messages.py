@@ -20,9 +20,26 @@ class SystemMessage(BaseModel):
     content: str = Field(..., description="System instruction content")
 
 
+class TextContentPart(BaseModel):
+    type: Literal["text"] = Field(default="text", description="Content part type")
+    text: str = Field(..., description="Plain text segment")
+
+
+class ImageUrl(BaseModel):
+    url: str = Field(..., description="data: URI or HTTPS URL of the image")
+
+
+class ImageContentPart(BaseModel):
+    type: Literal["image_url"] = Field(default="image_url", description="Content part type")
+    image_url: ImageUrl = Field(..., description="Image source for the LLM")
+
+
+UserMessageContent = str | list[TextContentPart | ImageContentPart]
+
+
 class UserMessage(BaseModel):
     role: Literal["user"] = Field(default="user", description="Message role")
-    content: str = Field(..., description="User message content")
+    content: UserMessageContent = Field(..., description="Text or multimodal content parts")
 
 
 class AssistantMessage(BaseModel):

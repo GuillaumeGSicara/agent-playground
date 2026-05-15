@@ -1,9 +1,9 @@
 import uvicorn
 
-from agent_playground.card import build_agent_card
-from agent_playground.execution.agui import AguiHandler
-from agent_playground.execution.agent import Agent
-from agent_playground.execution.executor import WebSearchAgentExecutor
+from agent_playground.server.card import build_agent_card
+from agent_playground.services.agui import AguiHandler
+from agent_playground.services.agent import Agent
+from agent_playground.services.executor import WebSearchAgentExecutor
 from agent_playground.infrastructure.conversation_store import ConversationStore
 from agent_playground.infrastructure.llm import LLMClient
 from agent_playground.infrastructure.search import WebSearchTool
@@ -12,8 +12,6 @@ from agent_playground.settings import AgentSettings
 from starlette.applications import Starlette
 
 from a2a.types import AgentCard
-
-...
 
 
 def main() -> None:

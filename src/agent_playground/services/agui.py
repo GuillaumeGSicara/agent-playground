@@ -1,12 +1,19 @@
+import base64
+import io
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Union
 
 from ag_ui.core import (
+    DocumentInputContent,
+    ImageInputContent,
+    InputContent,
+    InputContentDataSource,
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
+    TextInputContent,
     TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
@@ -15,12 +22,14 @@ from ag_ui.core import (
     ToolCallResultEvent as AguiToolCallResultEvent,
     ToolCallStartEvent as AguiToolCallStartEvent,
 )
+from ag_ui.core import UserMessage as AguiUserMessage
 from ag_ui.encoder import EventEncoder
+from pypdf import PdfReader
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from agent_playground.execution.agent import Agent
-from agent_playground.infrastructure.conversation_store import ConversationStore
+from agent_playground.services.agent import Agent
+from agent_playground.services.protocols import ConversationStoreProtocol
 from agent_playground.models.events import (
     AgentEvent,
     TextChunkEvent,
@@ -29,12 +38,55 @@ from agent_playground.models.events import (
     ToolCallStartEvent,
     ToolResultEvent,
 )
+from agent_playground.models.messages import (
+    ImageContentPart,
+    ImageUrl,
+    TextContentPart,
+    UserMessageContent,
+)
+
+
+def _to_user_content(raw: Union[str, list[InputContent]]) -> UserMessageContent:
+    if isinstance(raw, str):
+        return raw
+    parts: list[TextContentPart | ImageContentPart] = []
+    for part in raw:
+        if isinstance(part, TextInputContent):
+            parts.append(TextContentPart(text=part.text))
+        elif isinstance(part, ImageInputContent):
+            if isinstance(part.source, InputContentDataSource):
+                url: str = f"data:{part.source.mime_type};base64,{part.source.value}"
+            else:
+                url = part.source.value
+            parts.append(ImageContentPart(image_url=ImageUrl(url=url)))
+        elif isinstance(part, DocumentInputContent):
+            parts.append(_pdf_to_text_part(part))
+    return parts
+
+
+def _pdf_to_text_part(doc: DocumentInputContent) -> TextContentPart:
+    if isinstance(doc.source, InputContentDataSource):
+        pdf_bytes: bytes = base64.b64decode(doc.source.value)
+    else:
+        pdf_bytes = base64.b64decode(doc.source.value)
+    reader: PdfReader = PdfReader(io.BytesIO(pdf_bytes))
+    text: str = "\n".join(page.extract_text() or "" for page in reader.pages)
+    return TextContentPart(text=f"[PDF content]\n{text}")
+
+
+def _content_summary(content: UserMessageContent) -> str:
+    if isinstance(content, str):
+        return content
+    for part in content:
+        if isinstance(part, TextContentPart):
+            return part.text
+    return ""
 
 
 class AguiHandler:
-    def __init__(self, agent: Agent, conversation_store: ConversationStore) -> None:
+    def __init__(self, agent: Agent, conversation_store: ConversationStoreProtocol) -> None:
         self._agent: Agent = agent
-        self._conversation_store: ConversationStore = conversation_store
+        self._conversation_store: ConversationStoreProtocol = conversation_store
 
     async def handle(self, request: Request) -> StreamingResponse:
         body: dict[str, object] = await request.json()
@@ -58,9 +110,9 @@ class AguiHandler:
     ) -> AsyncGenerator[str, None]:
         yield encoder.encode(RunStartedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id))
 
-        user_messages = [m for m in input_data.messages if m.role == "user"]
-        user_text: str = str(user_messages[-1].content) if user_messages else ""
-        self._conversation_store.record(input_data.thread_id, user_text)
+        ag_user_messages: list[AguiUserMessage] = [m for m in input_data.messages if m.role == "user"]
+        user_content: UserMessageContent = _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
+        self._conversation_store.record(input_data.thread_id, _content_summary(user_content))
 
         state: dict[str, Any] = {
             "message_id": str(uuid.uuid4()),
@@ -68,7 +120,7 @@ class AguiHandler:
         }
 
         try:
-            async for event in self._agent.run(user_text):
+            async for event in self._agent.run(user_content):
                 async for encoded_event in self._handle_agent_event(event, state, encoder):
                     yield encoded_event
 

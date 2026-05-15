@@ -24,6 +24,7 @@ from agent_playground.models.messages import (
     ToolCallParam,
     ToolMessage,
     UserMessage,
+    UserMessageContent,
 )
 
 
@@ -48,13 +49,13 @@ class Agent:
 
     def _build_initial_messages(
         self,
-        user_message: str,
+        user_content: UserMessageContent,
         history: list[LLMMessage] | None,
     ) -> list[LLMMessage]:
         return [
             SystemMessage(role="system", content=SYSTEM_PROMPT),
             *(history or []),
-            UserMessage(role="user", content=user_message),
+            UserMessage(role="user", content=user_content),
         ]
 
     def _process_tool_call_delta(
@@ -128,10 +129,10 @@ class Agent:
 
     async def run(
         self,
-        user_message: str,
+        user_content: UserMessageContent,
         history: list[LLMMessage] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
-        messages: list[LLMMessage] = self._build_initial_messages(user_message, history)
+        messages: list[LLMMessage] = self._build_initial_messages(user_content, history)
 
         for _ in range(MAX_REACT_ITERATIONS):
             state: _StepState = _StepState()

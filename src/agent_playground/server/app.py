@@ -8,16 +8,17 @@ from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import AgentCard
 
-from agent_playground.execution.agui import AguiHandler
-from agent_playground.execution.executor import WebSearchAgentExecutor
-from agent_playground.infrastructure.conversation_store import ConversationStore, ConversationSummary
+from agent_playground.models.conversations import ConversationSummary
+from agent_playground.services.agui import AguiHandler
+from agent_playground.services.executor import WebSearchAgentExecutor
+from agent_playground.services.protocols import ConversationStoreProtocol
 
 
 def build_app(
     agent_card: AgentCard,
     executor: WebSearchAgentExecutor,
     agui_handler: AguiHandler,
-    conversation_store: ConversationStore,
+    conversation_store: ConversationStoreProtocol,
 ) -> Starlette:
     request_handler: DefaultRequestHandler = DefaultRequestHandler(
         agent_executor=executor,

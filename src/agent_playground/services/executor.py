@@ -5,7 +5,7 @@ from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Part
 
-from agent_playground.execution.agent import Agent
+from agent_playground.services.agent import Agent
 from agent_playground.models.events import TextChunkEvent
 
 

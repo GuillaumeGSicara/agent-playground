@@ -1,0 +1,25 @@
+[importlinter]
+root_packages =
+    agent_playground
+
+# Enforces the closed 3-tier ordering: server → services → infrastructure.
+# Cross-cutting modules (models, constants, settings) are intentionally
+# excluded from the stack so any layer may freely import them.
+[importlinter:contract:layers]
+name = Enforce layer dependency direction
+type = layers
+layers =
+    agent_playground.server
+    agent_playground.services
+    agent_playground.infrastructure
+
+
+[importlinter:contract:models-do-not-import-layers]
+name = Models must not import application layers
+type = forbidden
+source_modules =
+    agent_playground.models
+forbidden_modules =
+    agent_playground.server
+    agent_playground.services
+    agent_playground.infrastructure
