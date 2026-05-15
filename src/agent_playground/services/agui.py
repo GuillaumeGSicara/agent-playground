@@ -30,7 +30,6 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from agent_playground.services.agent import Agent
-from agent_playground.services.protocols import ConversationStoreProtocol
 from agent_playground.models.events import (
     AgentEvent,
     TextChunkEvent,
@@ -50,18 +49,23 @@ from agent_playground.models.messages import (
 def _to_user_content(raw: Union[str, list[InputContent]]) -> UserMessageContent:
     if isinstance(raw, str):
         return raw
+
     parts: list[TextContentPart | ImageContentPart] = []
+
     for part in raw:
-        if isinstance(part, TextInputContent):
-            parts.append(TextContentPart(text=part.text))
-        elif isinstance(part, ImageInputContent):
-            if isinstance(part.source, InputContentDataSource):
-                url: str = f"data:{part.source.mime_type};base64,{part.source.value}"
-            else:
-                url = part.source.value
-            parts.append(ImageContentPart(image_url=ImageUrl(url=url)))
-        elif isinstance(part, DocumentInputContent):
-            parts.append(_pdf_to_text_part(part))
+        match part:
+            case TextInputContent():
+                parts.append(TextContentPart(text=part.text))
+            case ImageInputContent():
+                if isinstance(part.source, InputContentDataSource):
+                    url: str = f"data:{part.source.mime_type};base64,{part.source.value}"
+                else:
+                    url = part.source.value
+                parts.append(ImageContentPart(image_url=ImageUrl(url=url)))
+            case DocumentInputContent():
+                parts.append(_pdf_to_text_part(part))
+            case _:
+                raise TypeError(f"Unsupported input content type: {type(part).__name__}")
     return parts
 
 
@@ -75,19 +79,9 @@ def _pdf_to_text_part(doc: DocumentInputContent) -> TextContentPart:
     return TextContentPart(text=f"[PDF content]\n{text}")
 
 
-def _content_summary(content: UserMessageContent) -> str:
-    if isinstance(content, str):
-        return content
-    for part in content:
-        if isinstance(part, TextContentPart):
-            return part.text
-    return ""
-
-
 class AguiHandler:
-    def __init__(self, agent: Agent, conversation_store: ConversationStoreProtocol) -> None:
+    def __init__(self, agent: Agent) -> None:
         self._agent: Agent = agent
-        self._conversation_store: ConversationStoreProtocol = conversation_store
 
     async def handle(self, request: Request) -> StreamingResponse:
         body: dict[str, object] = await request.json()
@@ -115,8 +109,6 @@ class AguiHandler:
 
         ag_user_messages: list[AguiUserMessage] = [m for m in input_data.messages if m.role == "user"]
         user_content: UserMessageContent = _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
-        logger.debug("User content summary: {!r}", _content_summary(user_content)[:120])
-        self._conversation_store.record(input_data.thread_id, _content_summary(user_content))
 
         state: dict[str, Any] = {
             "message_id": str(uuid.uuid4()),

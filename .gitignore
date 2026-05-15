@@ -8,6 +8,7 @@
 data/
 !data/.gitkeep
 
+.DS_Store
 .cache/
 
 .env

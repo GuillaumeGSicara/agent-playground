@@ -1,6 +1,5 @@
-import { CopilotRuntime, ExperimentalEmptyAdapter, copilotRuntimeNextJSAppRouterEndpoint } from "@copilotkit/runtime";
+import { CopilotRuntime, createCopilotRuntimeHandler } from "@copilotkit/runtime/v2";
 import { HttpAgent } from "@ag-ui/client";
-import type { NextRequest } from "next/server";
 
 import { AGENT_ID, COPILOT_RUNTIME_BASE_PATH } from "./constants";
 
@@ -12,12 +11,8 @@ const runtime: CopilotRuntime = new CopilotRuntime({
   },
 });
 
-const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+export const copilotHandler = createCopilotRuntimeHandler({
   runtime,
-  serviceAdapter: new ExperimentalEmptyAdapter(),
-  endpoint: COPILOT_RUNTIME_BASE_PATH,
+  basePath: COPILOT_RUNTIME_BASE_PATH,
+  mode: "single-route",
 });
-
-export async function copilotHandler(req: NextRequest): Promise<Response> {
-  return handleRequest(req);
-}

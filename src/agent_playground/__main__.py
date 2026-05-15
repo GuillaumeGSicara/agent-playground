@@ -5,7 +5,6 @@ from starlette.applications import Starlette
 from a2a.types import AgentCard
 
 from agent_playground.configuration import configure_logging
-from agent_playground.infrastructure.conversation_store import ConversationStore
 from agent_playground.infrastructure.llm import LLMClient
 from agent_playground.infrastructure.search import WebSearchTool
 from agent_playground.server.app import build_app
@@ -36,15 +35,13 @@ def main() -> None:
     search_tool: WebSearchTool = WebSearchTool(api_key=settings.tavily_api_key)
     agent: Agent = Agent(llm_client=llm_client, search_tool=search_tool)
     executor: WebSearchAgentExecutor = WebSearchAgentExecutor(agent=agent)
-    conversation_store: ConversationStore = ConversationStore()
-    agui_handler: AguiHandler = AguiHandler(agent=agent, conversation_store=conversation_store)
+    agui_handler: AguiHandler = AguiHandler(agent=agent)
 
     agent_card: AgentCard = build_agent_card(url=f"http://{settings.agent_host}:{settings.agent_port}")
     app: Starlette = build_app(
         agent_card=agent_card,
         executor=executor,
         agui_handler=agui_handler,
-        conversation_store=conversation_store,
     )
 
     logger.info("Listening on http://{}:{}", settings.agent_host, settings.agent_port)
