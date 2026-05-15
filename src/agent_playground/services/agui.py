@@ -114,9 +114,7 @@ class AguiHandler:
         logger.info("Run started — thread={}, run={}", input_data.thread_id, input_data.run_id)
 
         ag_user_messages: list[AguiUserMessage] = [m for m in input_data.messages if m.role == "user"]
-        user_content: UserMessageContent = (
-            _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
-        )
+        user_content: UserMessageContent = _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
         logger.debug("User content summary: {!r}", _content_summary(user_content)[:120])
         self._conversation_store.record(input_data.thread_id, _content_summary(user_content))
 
