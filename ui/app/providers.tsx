@@ -5,10 +5,17 @@ import { CopilotKit } from "@copilotkit/react-core/v2";
 import "@copilotkit/react-core/v2/styles.css";
 
 import { AGENT_ID, COPILOT_RUNTIME_BASE_PATH } from "../lib/constants";
+import { toolCallRenderer } from "./tool-call-renderer";
+
+const renderToolCalls = [toolCallRenderer];
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <CopilotKit runtimeUrl={COPILOT_RUNTIME_BASE_PATH} agent={AGENT_ID}>
+    <CopilotKit
+      runtimeUrl={COPILOT_RUNTIME_BASE_PATH}
+      agent={AGENT_ID}
+      renderToolCalls={renderToolCalls}
+    >
       {children}
     </CopilotKit>
   );
