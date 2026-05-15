@@ -1,15 +1,14 @@
 import json
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from loguru import logger
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field
 
-from agent_playground.constants import MAX_REACT_ITERATIONS, ToolName
-from agent_playground.prompts import load_prompt
+from agent_playground.constants import MAX_REACT_ITERATIONS
 from agent_playground.infrastructure.llm import LLMClient
-from agent_playground.infrastructure.search import WebSearchTool
 from agent_playground.models.events import (
     AgentEvent,
     TextChunkEvent,
@@ -28,6 +27,8 @@ from agent_playground.models.messages import (
     UserMessage,
     UserMessageContent,
 )
+from agent_playground.models.tools import ToolDefinition, ToolProvider
+from agent_playground.prompts import load_prompt
 
 
 class PendingToolCall(BaseModel):
@@ -45,14 +46,20 @@ class _StepState(BaseModel):
 
 
 class Agent:
-    def __init__(self, llm_client: LLMClient, search_tool: WebSearchTool) -> None:
+    def __init__(self, llm_client: LLMClient, tool_providers: list[ToolProvider]) -> None:
         self._llm: LLMClient = llm_client
-        self._search_tool: WebSearchTool = search_tool
+        self._tool_providers: list[ToolProvider] = tool_providers
+        self._tool_definitions: list[ToolDefinition] = []
+
+    async def _ensure_tools(self) -> None:
+        if not self._tool_definitions:
+            for provider in self._tool_providers:
+                self._tool_definitions += await provider.list_definitions()
 
     def _build_initial_messages(
         self,
         user_content: UserMessageContent,
-        history: list[LLMMessage] | None,
+        history: list[LLMMessage] | None = None,
     ) -> list[LLMMessage]:
         return [
             SystemMessage(role="system", content=load_prompt("system_prompt")),
@@ -105,7 +112,7 @@ class Agent:
     ) -> AsyncGenerator[AgentEvent, None]:
         message_id: str = str(uuid.uuid4())
 
-        async for chunk in self._llm.stream_chat(messages, [self._search_tool.definition]):
+        async for chunk in self._llm.stream_chat(messages, self._tool_definitions):
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
@@ -138,6 +145,7 @@ class Agent:
         history: list[LLMMessage] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
         logger.info("Agent run started")
+        await self._ensure_tools()
         messages: list[LLMMessage] = self._build_initial_messages(user_content, history)
 
         for i in range(MAX_REACT_ITERATIONS):
@@ -163,11 +171,13 @@ class Agent:
 
     async def _execute_tool(self, tool_name: str, args_json: str) -> str:
         logger.debug("Executing '{}' with args: {}", tool_name, args_json)
-        if tool_name == ToolName.WEB_SEARCH:
-            try:
-                args: dict[str, str] = json.loads(args_json)
-                return await self._search_tool.run(args.get("query", ""))
-            except json.JSONDecodeError:
-                logger.warning("Cannot parse args for '{}': {}", tool_name, args_json)
-                return f"Error: could not parse arguments for {tool_name}"
+        try:
+            args: dict[str, Any] = json.loads(args_json)
+        except json.JSONDecodeError:
+            logger.warning("Cannot parse args for '{}': {}", tool_name, args_json)
+            return f"Error: could not parse arguments for {tool_name}"
+        for provider in self._tool_providers:
+            result: str | None = await provider.handle_call(tool_name, args)
+            if result is not None:
+                return result
         return f"Error: unknown tool '{tool_name}'"

@@ -1,10 +1,11 @@
 import uvicorn
+from a2a.types import AgentCard
 from loguru import logger
 from starlette.applications import Starlette
 
-from a2a.types import AgentCard
-
 from agent_playground.configuration import configure_logging
+from agent_playground.constants import DATAGOUV_MCP_URL
+from agent_playground.infrastructure.datagouv_mcp import DatagouvMCPClient
 from agent_playground.infrastructure.llm import LLMClient
 from agent_playground.infrastructure.search import WebSearchTool
 from agent_playground.server.app import build_app
@@ -16,7 +17,7 @@ from agent_playground.settings import AgentSettings
 
 
 def main() -> None:
-    settings: AgentSettings = AgentSettings()  # type: ignore[call-arg]
+    settings: AgentSettings = AgentSettings()  # type: ignore[call-arg]  # fields come from env / .env file
     configure_logging(settings.log_level)
 
     logger.info(
@@ -33,7 +34,8 @@ def main() -> None:
         model_name=settings.model_name,
     )
     search_tool: WebSearchTool = WebSearchTool(api_key=settings.tavily_api_key)
-    agent: Agent = Agent(llm_client=llm_client, search_tool=search_tool)
+    mcp_client: DatagouvMCPClient = DatagouvMCPClient(url=DATAGOUV_MCP_URL)
+    agent: Agent = Agent(llm_client=llm_client, tool_providers=[search_tool, mcp_client])
     executor: WebSearchAgentExecutor = WebSearchAgentExecutor(agent=agent)
     agui_handler: AguiHandler = AguiHandler(agent=agent)
 

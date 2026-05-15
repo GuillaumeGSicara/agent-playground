@@ -1,6 +1,9 @@
+from typing import Any
+
 from loguru import logger
 from pydantic import SecretStr
 from tavily import AsyncTavilyClient
+from tavily.errors import BadRequestError
 
 from agent_playground.constants import ToolName
 from agent_playground.models.tools import ToolDefinition, ToolFunction, ToolParameter, ToolParameters
@@ -27,10 +30,22 @@ class WebSearchTool:
             )
         )
 
+    async def list_definitions(self) -> list[ToolDefinition]:
+        return [self.definition]
+
+    async def handle_call(self, tool_name: str, args: dict[str, Any]) -> str | None:
+        if tool_name != ToolName.WEB_SEARCH:
+            return None
+        return await self.run(args.get("query", ""))
+
     async def run(self, query: str) -> str:
         logger.info("Web search — query={!r}", query)
-        response: dict = await self._client.search(query, max_results=5)
-        results: list[dict] = response.get("results", [])
+        try:
+            response: dict[str, Any] = await self._client.search(query, max_results=5)
+        except BadRequestError as e:
+            logger.warning("Tavily bad request — query={!r}, error={}", query, e)
+            return f"Search failed: {e}. Please reformulate the query with explicit search terms."
+        results: list[dict[str, Any]] = response.get("results", [])
         logger.debug("Tavily returned {} result(s)", len(results))
         if not results:
             logger.info("No results for query {!r}", query)

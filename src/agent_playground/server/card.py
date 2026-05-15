@@ -1,4 +1,4 @@
-from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, TransportProtocol
 
 from agent_playground.constants import AgentMeta, SkillId

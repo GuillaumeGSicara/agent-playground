@@ -6,8 +6,8 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import Part
 from loguru import logger
 
-from agent_playground.services.agent import Agent
 from agent_playground.models.events import TextChunkEvent
+from agent_playground.services.agent import Agent
 
 
 class WebSearchAgentExecutor(AgentExecutor):

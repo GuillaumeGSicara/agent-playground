@@ -22,8 +22,9 @@ class LLMClient:
     async def stream_chat(
         self,
         messages: list[LLMMessage],
-        tools: list[ToolDefinition] = [],
+        tools: list[ToolDefinition] | None = None,
     ) -> AsyncGenerator[ChatCompletionChunk, None]:
+        tools = tools or []
         logger.info("LLM request — model={}, messages={}, tools={}", self._model_name, len(messages), len(tools))
 
         messages_data: list[dict[str, Any]] = [m.model_dump(exclude_none=True) for m in messages]

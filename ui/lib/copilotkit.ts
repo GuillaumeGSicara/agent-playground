@@ -14,5 +14,4 @@ const runtime: CopilotRuntime = new CopilotRuntime({
 export const copilotHandler = createCopilotRuntimeHandler({
   runtime,
   basePath: COPILOT_RUNTIME_BASE_PATH,
-  mode: "single-route",
 });

@@ -1,3 +1,5 @@
+from typing import Any, Protocol
+
 from pydantic import BaseModel, Field
 
 
@@ -21,3 +23,10 @@ class ToolFunction(BaseModel):
 class ToolDefinition(BaseModel):
     type: str = Field(default="function", description="Tool type, always 'function'")
     function: ToolFunction = Field(..., description="Full function definition")
+
+
+class ToolProvider(Protocol):
+    async def list_definitions(self) -> list[ToolDefinition]: ...
+    async def handle_call(self, tool_name: str, args: dict[str, Any]) -> str | None:
+        """Return the tool result, or None if this provider does not handle tool_name."""
+        ...

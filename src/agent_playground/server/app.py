@@ -1,13 +1,12 @@
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.types import AgentCard
 from loguru import logger
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
-
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
-from a2a.types import AgentCard
 
 from agent_playground.services.agui import AguiHandler
 from agent_playground.services.executor import WebSearchAgentExecutor

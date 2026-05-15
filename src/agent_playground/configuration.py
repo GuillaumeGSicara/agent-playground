@@ -22,7 +22,7 @@ def configure_logging(level: str) -> None:
     logger.add(
         sys.stderr,
         level=level,
-        format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> — <level>{message}</level>",
+        format="<green>{time:HH:mm:ss.SSS}</green> | <level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> — <level>{message}</level>",  # noqa: E501
         colorize=True,
     )
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)

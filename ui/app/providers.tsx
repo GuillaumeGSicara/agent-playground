@@ -14,6 +14,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <CopilotKit
       runtimeUrl={COPILOT_RUNTIME_BASE_PATH}
       agent={AGENT_ID}
+      useSingleEndpoint={false}
       renderToolCalls={renderToolCalls}
     >
       {children}

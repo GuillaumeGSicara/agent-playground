@@ -2,7 +2,8 @@ import base64
 import io
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, Union
+from dataclasses import dataclass, field
+from typing import Any
 
 from ag_ui.core import (
     DocumentInputContent,
@@ -17,19 +18,31 @@ from ag_ui.core import (
     TextMessageContentEvent,
     TextMessageEndEvent,
     TextMessageStartEvent,
+)
+from ag_ui.core import (
+    Message as AguiMessage,
+)
+from ag_ui.core import (
     ToolCallArgsEvent as AguiToolCallArgsEvent,
+)
+from ag_ui.core import (
     ToolCallEndEvent as AguiToolCallEndEvent,
+)
+from ag_ui.core import (
     ToolCallResultEvent as AguiToolCallResultEvent,
+)
+from ag_ui.core import (
     ToolCallStartEvent as AguiToolCallStartEvent,
 )
-from ag_ui.core import UserMessage as AguiUserMessage
+from ag_ui.core import (
+    UserMessage as AguiUserMessage,
+)
 from ag_ui.encoder import EventEncoder
 from loguru import logger
 from pypdf import PdfReader
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from agent_playground.services.agent import Agent
 from agent_playground.models.events import (
     AgentEvent,
     TextChunkEvent,
@@ -39,14 +52,48 @@ from agent_playground.models.events import (
     ToolResultEvent,
 )
 from agent_playground.models.messages import (
+    AssistantMessage,
     ImageContentPart,
     ImageUrl,
+    LLMMessage,
     TextContentPart,
+    ToolCallFunction,
+    ToolCallParam,
+    ToolMessage,
+    UserMessage,
     UserMessageContent,
 )
+from agent_playground.services.agent import Agent
 
 
-def _to_user_content(raw: Union[str, list[InputContent]]) -> UserMessageContent:
+def _to_history(messages: list[AguiMessage]) -> list[LLMMessage]:
+    history: list[LLMMessage] = []
+    for msg in messages:
+        if msg.role == "user" and isinstance(msg.content, (str, list)):
+            history.append(UserMessage(content=_to_user_content(msg.content)))
+        elif msg.role == "assistant":
+            tool_calls: Any = getattr(msg, "tool_calls", None)
+            if tool_calls:
+                history.append(
+                    AssistantMessage(
+                        content=getattr(msg, "content", None) or None,
+                        tool_calls=[
+                            ToolCallParam(
+                                id=tc.id,
+                                function=ToolCallFunction(name=tc.function.name, arguments=tc.function.arguments),
+                            )
+                            for tc in tool_calls
+                        ],
+                    )
+                )
+            elif getattr(msg, "content", None):
+                history.append(AssistantMessage(content=msg.content))
+        elif msg.role == "tool":
+            history.append(ToolMessage(tool_call_id=msg.tool_call_id, content=msg.content))
+    return history
+
+
+def _to_user_content(raw: str | list[InputContent]) -> UserMessageContent:
     if isinstance(raw, str):
         return raw
 
@@ -79,12 +126,18 @@ def _pdf_to_text_part(doc: DocumentInputContent) -> TextContentPart:
     return TextContentPart(text=f"[PDF content]\n{text}")
 
 
+@dataclass
+class _GenerationState:
+    message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    message_started: bool = False
+
+
 class AguiHandler:
     def __init__(self, agent: Agent) -> None:
         self._agent: Agent = agent
 
     async def handle(self, request: Request) -> StreamingResponse:
-        body: dict[str, object] = await request.json()
+        body: dict[str, Any] = await request.json()
         input_data: RunAgentInput = RunAgentInput.model_validate(body)
         logger.debug("POST /invocations — thread={}, run={}", input_data.thread_id, input_data.run_id)
         encoder: EventEncoder = EventEncoder(accept=request.headers.get("accept", ""))
@@ -107,21 +160,26 @@ class AguiHandler:
         yield encoder.encode(RunStartedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id))
         logger.info("Run started — thread={}, run={}", input_data.thread_id, input_data.run_id)
 
-        ag_user_messages: list[AguiUserMessage] = [m for m in input_data.messages if m.role == "user"]
-        user_content: UserMessageContent = _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
+        all_msgs: list[AguiMessage] = input_data.messages
+        user_msgs: list[AguiUserMessage] = [m for m in all_msgs if m.role == "user"]
+        last_user_msg: AguiUserMessage | None = user_msgs[-1] if user_msgs else None
+        last_user_idx: int = (
+            len(all_msgs) - 1 - next(i for i, m in enumerate(reversed(all_msgs)) if m.role == "user")
+            if last_user_msg
+            else -1
+        )
+        user_content: UserMessageContent = _to_user_content(last_user_msg.content) if last_user_msg else ""
+        history: list[LLMMessage] = _to_history(all_msgs[:last_user_idx])
 
-        state: dict[str, Any] = {
-            "message_id": str(uuid.uuid4()),
-            "message_started": False,
-        }
+        state: _GenerationState = _GenerationState()
 
         try:
-            async for event in self._agent.run(user_content):
+            async for event in self._agent.run(user_content, history=history):
                 async for encoded_event in self._handle_agent_event(event, state, encoder):
                     yield encoded_event
 
-            if state["message_started"]:
-                yield encoder.encode(TextMessageEndEvent(message_id=state["message_id"]))
+            if state.message_started:
+                yield encoder.encode(TextMessageEndEvent(message_id=state.message_id))
 
             yield encoder.encode(RunFinishedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id))
             logger.info("Run finished — thread={}, run={}", input_data.thread_id, input_data.run_id)
@@ -133,14 +191,14 @@ class AguiHandler:
     async def _handle_agent_event(
         self,
         event: AgentEvent,
-        state: dict[str, Any],
+        state: _GenerationState,
         encoder: EventEncoder,
     ) -> AsyncGenerator[str, None]:
         if isinstance(event, TextChunkEvent):
-            if not state["message_started"]:
-                yield encoder.encode(TextMessageStartEvent(message_id=state["message_id"], role="assistant"))
-                state["message_started"] = True
-            yield encoder.encode(TextMessageContentEvent(message_id=state["message_id"], delta=event.delta))
+            if not state.message_started:
+                yield encoder.encode(TextMessageStartEvent(message_id=state.message_id, role="assistant"))
+                state.message_started = True
+            yield encoder.encode(TextMessageContentEvent(message_id=state.message_id, delta=event.delta))
         elif isinstance(event, ToolCallStartEvent | ToolCallArgsEvent | ToolCallEndEvent | ToolResultEvent):
             async for encoded in self._handle_tool_event(event, encoder):
                 yield encoded
