@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from loguru import logger
+
 from agent_playground.models.conversations import ConversationSummary
 
 
@@ -12,6 +14,12 @@ class ConversationStore:
     def record(self, thread_id: str, last_user_message: str) -> None:
         existing: ConversationSummary | None = self._threads.get(thread_id)
         run_count: int = (existing.run_count + 1) if existing else 1
+        logger.debug(
+            "Conversation {} — thread={}…, run={}",
+            "created" if not existing else "updated",
+            thread_id[:8],
+            run_count,
+        )
         self._threads[thread_id] = ConversationSummary(
             thread_id=thread_id,
             last_user_message=last_user_message[:200],

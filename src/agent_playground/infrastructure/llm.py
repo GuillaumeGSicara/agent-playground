@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from loguru import logger
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionChunk
 from pydantic import SecretStr
@@ -23,6 +24,7 @@ class LLMClient:
         messages: list[LLMMessage],
         tools: list[ToolDefinition] = [],
     ) -> AsyncGenerator[ChatCompletionChunk, None]:
+        logger.info("LLM request — model={}, messages={}, tools={}", self._model_name, len(messages), len(tools))
 
         messages_data: list[dict[str, Any]] = [m.model_dump(exclude_none=True) for m in messages]
         kwargs: dict[str, Any] = {
@@ -32,6 +34,8 @@ class LLMClient:
             "tools": [t.model_dump() for t in tools] if tools else None,
         }
 
+        logger.debug("LLM stream opened")
         stream = await self._client.chat.completions.create(**kwargs)
         async for chunk in stream:
             yield chunk
+        logger.debug("LLM stream closed")

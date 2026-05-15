@@ -4,6 +4,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Part
+from loguru import logger
 
 from agent_playground.services.agent import Agent
 from agent_playground.models.events import TextChunkEvent
@@ -16,6 +17,7 @@ class WebSearchAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id: str = context.task_id or ""
         context_id: str = context.context_id or ""
+        logger.info("Task execute — task_id={}", task_id)
         updater: TaskUpdater = TaskUpdater(event_queue, task_id, context_id)
         await updater.start_work()
 
@@ -48,7 +50,9 @@ class WebSearchAgentExecutor(AgentExecutor):
                 )
 
             await updater.complete()
+            logger.info("Task completed — task_id={}", task_id)
         except Exception as exc:
+            logger.exception("Task failed — task_id={}", task_id)
             error_part: Part = Part()
             error_part.text = str(exc)
             await updater.failed(message=updater.new_agent_message(parts=[error_part]))
@@ -56,5 +60,6 @@ class WebSearchAgentExecutor(AgentExecutor):
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id: str = context.task_id or ""
         context_id: str = context.context_id or ""
+        logger.info("Task cancel — task_id={}", task_id)
         updater: TaskUpdater = TaskUpdater(event_queue, task_id, context_id)
         await updater.cancel()

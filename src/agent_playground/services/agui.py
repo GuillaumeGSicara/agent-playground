@@ -24,6 +24,7 @@ from ag_ui.core import (
 )
 from ag_ui.core import UserMessage as AguiUserMessage
 from ag_ui.encoder import EventEncoder
+from loguru import logger
 from pypdf import PdfReader
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
@@ -91,6 +92,7 @@ class AguiHandler:
     async def handle(self, request: Request) -> StreamingResponse:
         body: dict[str, object] = await request.json()
         input_data: RunAgentInput = RunAgentInput.model_validate(body)
+        logger.debug("POST /invocations — thread={}, run={}", input_data.thread_id, input_data.run_id)
         encoder: EventEncoder = EventEncoder(accept=request.headers.get("accept", ""))
 
         return StreamingResponse(
@@ -109,9 +111,13 @@ class AguiHandler:
         encoder: EventEncoder,
     ) -> AsyncGenerator[str, None]:
         yield encoder.encode(RunStartedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id))
+        logger.info("Run started — thread={}, run={}", input_data.thread_id, input_data.run_id)
 
         ag_user_messages: list[AguiUserMessage] = [m for m in input_data.messages if m.role == "user"]
-        user_content: UserMessageContent = _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
+        user_content: UserMessageContent = (
+            _to_user_content(ag_user_messages[-1].content) if ag_user_messages else ""
+        )
+        logger.debug("User content summary: {!r}", _content_summary(user_content)[:120])
         self._conversation_store.record(input_data.thread_id, _content_summary(user_content))
 
         state: dict[str, Any] = {
@@ -128,8 +134,10 @@ class AguiHandler:
                 yield encoder.encode(TextMessageEndEvent(message_id=state["message_id"]))
 
             yield encoder.encode(RunFinishedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id))
+            logger.info("Run finished — thread={}, run={}", input_data.thread_id, input_data.run_id)
 
         except Exception as exc:
+            logger.exception("Run error — thread={}, run={}", input_data.thread_id, input_data.run_id)
             yield encoder.encode(RunErrorEvent(message=str(exc)))
 
     async def _handle_agent_event(

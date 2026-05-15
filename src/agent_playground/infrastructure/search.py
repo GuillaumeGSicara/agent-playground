@@ -1,3 +1,4 @@
+from loguru import logger
 from pydantic import SecretStr
 from tavily import AsyncTavilyClient
 
@@ -27,9 +28,12 @@ class WebSearchTool:
         )
 
     async def run(self, query: str) -> str:
+        logger.info("Web search — query={!r}", query)
         response: dict = await self._client.search(query, max_results=5)
         results: list[dict] = response.get("results", [])
+        logger.debug("Tavily returned {} result(s)", len(results))
         if not results:
+            logger.info("No results for query {!r}", query)
             return f"No results found for '{query}'."
         lines: list[str] = []
         for r in results:

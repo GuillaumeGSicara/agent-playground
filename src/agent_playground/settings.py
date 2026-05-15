@@ -28,3 +28,4 @@ class AgentSettings(BaseSettings):
     tavily_api_key: SecretStr = Field(..., description="Tavily API key for web search")
     agent_host: str = Field(default="0.0.0.0", description="Host to bind the server to")
     agent_port: int = Field(default=8000, description="Port to bind the server to")
+    log_level: str = Field(default="INFO", description="Logging level — DEBUG or INFO")

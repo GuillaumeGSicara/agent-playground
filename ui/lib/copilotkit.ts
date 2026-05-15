@@ -12,11 +12,12 @@ const runtime: CopilotRuntime = new CopilotRuntime({
   },
 });
 
+const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+  runtime,
+  serviceAdapter: new ExperimentalEmptyAdapter(),
+  endpoint: COPILOT_RUNTIME_BASE_PATH,
+});
+
 export async function copilotHandler(req: NextRequest): Promise<Response> {
-  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter: new ExperimentalEmptyAdapter(),
-    endpoint: COPILOT_RUNTIME_BASE_PATH,
-  });
   return handleRequest(req);
 }

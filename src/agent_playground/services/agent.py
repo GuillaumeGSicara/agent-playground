@@ -2,10 +2,12 @@ import json
 import uuid
 from collections.abc import AsyncGenerator
 
+from loguru import logger
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from pydantic import BaseModel, Field
 
-from agent_playground.constants import MAX_REACT_ITERATIONS, SYSTEM_PROMPT, ToolName
+from agent_playground.constants import MAX_REACT_ITERATIONS, ToolName
+from agent_playground.prompts import load_prompt
 from agent_playground.infrastructure.llm import LLMClient
 from agent_playground.infrastructure.search import WebSearchTool
 from agent_playground.models.events import (
@@ -53,7 +55,7 @@ class Agent:
         history: list[LLMMessage] | None,
     ) -> list[LLMMessage]:
         return [
-            SystemMessage(role="system", content=SYSTEM_PROMPT),
+            SystemMessage(role="system", content=load_prompt("system_prompt")),
             *(history or []),
             UserMessage(role="user", content=user_content),
         ]
@@ -78,6 +80,7 @@ class Agent:
         tc_id: str = tc.id or ""
         tc_name: str = (tc.function.name or "") if tc.function else ""
         pending[tc.index] = PendingToolCall(id=tc_id, name=tc_name, args="")
+        logger.info("Tool call started — tool={}, id={}", tc_name, tc_id)
         return [ToolCallStartEvent(tool_call_id=tc_id, tool_name=tc_name, parent_message_id=message_id)]
 
     def _update_pending_tool_call(
@@ -124,6 +127,8 @@ class Agent:
         for v in pending.values():
             yield ToolCallEndEvent(tool_call_id=v.id)
             result: str = await self._execute_tool(v.name, v.args)
+            logger.info("Tool result received — tool={}", v.name)
+            logger.debug("Tool result (first 200 chars): {:.200}", result)
             yield ToolResultEvent(tool_call_id=v.id, result=result)
             messages.append(ToolMessage(role="tool", tool_call_id=v.id, content=result))
 
@@ -132,13 +137,16 @@ class Agent:
         user_content: UserMessageContent,
         history: list[LLMMessage] | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
+        logger.info("Agent run started")
         messages: list[LLMMessage] = self._build_initial_messages(user_content, history)
 
-        for _ in range(MAX_REACT_ITERATIONS):
+        for i in range(MAX_REACT_ITERATIONS):
+            logger.debug("ReAct iteration {}/{}", i + 1, MAX_REACT_ITERATIONS)
             state: _StepState = _StepState()
             async for event in self._stream_llm_response(messages, state):
                 yield event
             if state.finish_reason != "tool_calls":
+                logger.info("Agent run completed — iterations={}, finish_reason={}", i + 1, state.finish_reason)
                 break
             messages.append(
                 AssistantMessage(
@@ -154,10 +162,12 @@ class Agent:
                 yield event
 
     async def _execute_tool(self, tool_name: str, args_json: str) -> str:
+        logger.debug("Executing '{}' with args: {}", tool_name, args_json)
         if tool_name == ToolName.WEB_SEARCH:
             try:
                 args: dict[str, str] = json.loads(args_json)
                 return await self._search_tool.run(args.get("query", ""))
             except json.JSONDecodeError:
+                logger.warning("Cannot parse args for '{}': {}", tool_name, args_json)
                 return f"Error: could not parse arguments for {tool_name}"
         return f"Error: unknown tool '{tool_name}'"

@@ -1,3 +1,4 @@
+from loguru import logger
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -27,10 +28,12 @@ def build_app(
     )
 
     async def ping(_request: Request) -> JSONResponse:
+        logger.debug("GET /ping")
         return JSONResponse({"status": "Healthy"})
 
     async def list_tasks(_request: Request) -> JSONResponse:
         conversations: list[ConversationSummary] = conversation_store.all()
+        logger.debug("GET /tasks — {} conversation(s)", len(conversations))
         return JSONResponse(
             {
                 "conversations": [
