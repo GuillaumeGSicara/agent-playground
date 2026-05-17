@@ -46,10 +46,41 @@ class _StepState(BaseModel):
 
 
 class Agent:
-    def __init__(self, llm_client: LLMClient, tool_providers: list[ToolProvider]) -> None:
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        tool_providers: list[ToolProvider],
+        max_context_tokens: int = 100_000,
+    ) -> None:
         self._llm: LLMClient = llm_client
         self._tool_providers: list[ToolProvider] = tool_providers
         self._tool_definitions: list[ToolDefinition] = []
+        self._max_context_tokens: int = max_context_tokens
+
+    @staticmethod
+    def _estimate_tokens(messages: list[LLMMessage]) -> int:
+        return sum(len(str(m.model_dump())) for m in messages) // 4
+
+    def _trim_history(self, history: list[LLMMessage], reserved_tokens: int) -> list[LLMMessage]:
+        budget: int = int(self._max_context_tokens * 0.85) - reserved_tokens
+        if budget <= 0:
+            return []
+        kept: list[LLMMessage] = []
+        used: int = 0
+        for msg in reversed(history):
+            cost: int = self._estimate_tokens([msg])
+            if used + cost > budget:
+                break
+            kept.append(msg)
+            used += cost
+        if len(kept) < len(history):
+            logger.warning(
+                "History trimmed: kept {}/{} messages to fit within {} token budget",
+                len(kept),
+                len(history),
+                self._max_context_tokens,
+            )
+        return list(reversed(kept))
 
     async def _ensure_tools(self) -> None:
         if not self._tool_definitions:
@@ -61,11 +92,11 @@ class Agent:
         user_content: UserMessageContent,
         history: list[LLMMessage] | None = None,
     ) -> list[LLMMessage]:
-        return [
-            SystemMessage(role="system", content=load_prompt("system_prompt")),
-            *(history or []),
-            UserMessage(role="user", content=user_content),
-        ]
+        system: SystemMessage = SystemMessage(role="system", content=load_prompt("system_prompt"))
+        user: UserMessage = UserMessage(role="user", content=user_content)
+        reserved: int = self._estimate_tokens([system, user])
+        trimmed: list[LLMMessage] = self._trim_history(history or [], reserved)
+        return [system, *trimmed, user]
 
     def _process_tool_call_delta(
         self,

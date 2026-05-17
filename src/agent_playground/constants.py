@@ -15,6 +15,7 @@ class ToolName(StrEnum):
 
 class SkillId(StrEnum):
     WEB_SEARCH = "web_search"
+    OPEN_DATA = "open_data"
 
 
 PROJECT_ROOT: Final[Path] = Path(__file__).parent.parent.parent

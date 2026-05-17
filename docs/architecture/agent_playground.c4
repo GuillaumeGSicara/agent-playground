@@ -7,11 +7,11 @@ model {
     description "External agent or tool using the A2A JSON-RPC protocol directly"
   }
 
-  agentPlayground = system "Agent Playground" {
-    description "Web search agent with dual-protocol support (A2A + AG-UI) and ReAct reasoning loop"
+  agentPlayground = system "Open Data Agent" {
+    description "ReAct agent with web search and French open data access. Dual-protocol: A2A (JSON-RPC) + AG-UI (SSE)."
 
     ui = webapp "Next.js UI" {
-      description "CopilotKit chat interface running at port 3000. Proxies AG-UI SSE to the Agent Server."
+      description "CopilotKit chat interface at port 3000. Includes a CopilotKit Runtime API route (/api/copilotkit) that proxies AG-UI SSE requests to the Agent Server."
       technology "React 19, Next.js 15, CopilotKit 1.57"
       style {
         icon tech:nextjs
@@ -22,13 +22,14 @@ model {
       description "
         Starlette ASGI server at port 8000.
         ReAct loop: up to 5 reasoning + tool-call iterations per request.
+        Tool providers: WebSearchTool (Tavily) and DatagouvMCPClient (data.gouv.fr MCP).
         AG-UI endpoint: POST /invocations (SSE).
         A2A endpoint: POST / (JSON-RPC).
       "
       technology "Python 3.12, Starlette, Uvicorn"
     }
 
-    ui -[sse]-> server "AG-UI SSE stream"
+    ui -[sse]-> server "AG-UI SSE (via CopilotKit Runtime proxy)"
   }
 
   llmBackend = system "LLM Backend" {
@@ -47,8 +48,17 @@ model {
     }
   }
 
+  datagouvMcp = system "data.gouv.fr MCP" {
+    #external
+    description "French government open data platform MCP server at https://mcp.data.gouv.fr/mcp. Provides dataset search and access tools via streamable HTTP transport."
+    style {
+      color secondary
+    }
+  }
+
   user -> agentPlayground.ui "opens chat"
   a2aClient -> agentPlayground.server "sends task (A2A JSON-RPC)"
   agentPlayground.server -> llmBackend "chat completion via OpenAI API"
-  agentPlayground.server -> tavilyApi "web search query"
+  agentPlayground.server -> tavilyApi "web_search tool"
+  agentPlayground.server -> datagouvMcp "MCP tool calls (streamable HTTP)"
 }

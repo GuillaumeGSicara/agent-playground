@@ -35,7 +35,7 @@ def main() -> None:
     )
     search_tool: WebSearchTool = WebSearchTool(api_key=settings.tavily_api_key)
     mcp_client: DatagouvMCPClient = DatagouvMCPClient(url=DATAGOUV_MCP_URL)
-    agent: Agent = Agent(llm_client=llm_client, tool_providers=[search_tool, mcp_client])
+    agent: Agent = Agent(llm_client=llm_client, tool_providers=[search_tool, mcp_client], max_context_tokens=settings.max_context_tokens)
     executor: WebSearchAgentExecutor = WebSearchAgentExecutor(agent=agent)
     agui_handler: AguiHandler = AguiHandler(agent=agent)
 

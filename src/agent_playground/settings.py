@@ -29,3 +29,4 @@ class AgentSettings(BaseSettings):
     agent_host: str = Field(default="0.0.0.0", description="Host to bind the server to")
     agent_port: int = Field(default=8000, description="Port to bind the server to")
     log_level: str = Field(default="INFO", description="Logging level — DEBUG or INFO")
+    max_context_tokens: int = Field(default=100_000, description="Token budget for the full LLM context window")
